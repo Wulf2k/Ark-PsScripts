@@ -1,0 +1,189 @@
+$ErrorActionPreference = "SilentlyContinue"
+
+if ((Test-Path 'HKCU:\Software\NitrAPI') -eq $false)
+{
+	New-Item -Path 'HKCU:\Software\NitrAPI'
+	Set-ItemProperty -Path 'HKCU:\Software\NitrAPI' -Name 'oAuth' -Value (Read-Host 'Enter the oAuth key')
+}
+$oAuth = (Get-ItemProperty -Path 'HKCU:\Software\NitrAPI' -Name 'oAuth').oAuth
+
+#$oAuth = $null
+$game = $null
+$ntrid = $null
+$ntrhostname = $null
+$ntrusername = $null
+$ntrwinhostname = $null
+$headers = $null
+$body = $null
+$response = $null
+$uri = $null
+$password = $null
+$dir = $null
+$search = $null
+$page = $null
+$file = $null
+$url = $null
+$outfile = $null
+
+
+$headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
+$headers.Add("Authorization", "Bearer $oAuth")
+
+Function NtrGet
+{   
+	Param (
+        $uri,
+        $body = @{}
+    )
+
+	$response = Invoke-RestMethod $uri -Method Get -Headers $headers -Body $body
+	$response.data
+}
+Function NtrPost
+{   
+	Param (
+        $uri,
+        $body = @{}
+    )
+
+	$response = Invoke-RestMethod $uri -Method Post -Headers $headers -Body $body
+	$response
+}
+Function NtrUserDetails
+{
+	(NtrGet "https://api.nitrado.net/user").user
+}
+Function NtrServiceList
+{
+	(NtrGet "https://api.nitrado.net/services").services
+}
+
+$ntrid = (NtrServiceList).id
+$ntrusername = (NtrServiceList).username
+
+Function NtrServiceDetails
+{
+	(NtrGet "https://api.nitrado.net/services/$ntrid").service
+}
+Function NtrServiceLogs
+{
+	Param (
+		[Parameter(Mandatory=$false)]$page = 1
+	)
+	$body = @{page=$page}
+	(NtrGet "https://api.nitrado.net/services/$ntrid/logs" $body).logs
+}
+Function NtrServiceNotifications
+{
+	Param (
+		[Parameter(Mandatory=$false)]$include_dismissed = $false
+	)
+	$body = @{include_dismissed=$include_dismissed}
+	(NtrGet "https://api.nitrado.net/services/$ntrid/notifications" $body).notifications
+}
+Function NtrGameserverDetails
+{
+	(NtrGet "https://api.nitrado.net/services/$ntrid/gameservers").gameserver
+}
+$ntrhostname = (NtrGameserverDetails).hostsystems.linux.hostname
+$ntrwinhostname = (NtrGameserverDetails).hostsystems.windows.hostname
+Function NtrSetFtpPassword
+{
+	Param (
+		[Parameter(Mandatory=$true)]$password
+	)
+	$body = @{password=$password}
+	(NtrPost "https://api.nitrado.net/services/$ntrid/gameservers/ftp/password" $body)
+}
+Function NtrFilesList
+{
+	Param (
+		[Parameter(Mandatory=$false)]$dir = $null,
+		[Parameter(Mandatory=$false)]$search = $null
+	)
+	$body = @{dir=$dir;search=$search}
+	(NtrGet "https://api.nitrado.net/services/$ntrid/gameservers/file_server/list" $body).entries
+}
+Function NtrFileDownload
+{
+	Param (
+		[Parameter(Mandatory=$true)]$file
+	)
+	$body = @{file=$file}
+	$outfile = Split-Path $file -leaf
+	$url = (NtrGet "https://api.nitrado.net/services/$ntrid/gameservers/file_server/download" $body).token.url
+	Write-Host $file
+	wget $url -outfile $outfile
+}
+Function NtrFileCopy
+{
+	Param (
+		$source_path,
+		$target_path,
+		$target_name
+	)
+	$body = @{source_path=$source_path;target_path=$target_path;target_name=$target_name}
+	(NtrPost "https://api.nitrado.net/services/$ntrid/gameservers/file_server/copy" $body)
+}
+Function NtrDirDownload
+{   
+	Param (
+        $path
+    )
+	
+	Write-Host $path
+	
+	md (Split-Path $path -leaf) | out-null
+	cd (Split-Path $path -leaf)
+	
+	$list = (NtrFilesList $path)
+	foreach ($file in $list | where {$_.type -eq "file"}){
+		NtrFileDownload $file.path
+	}
+	foreach ($dir in $list | where {$_.type -eq "dir"}){
+		NtrDirDownload $dir.path
+	}
+	cd ..
+}
+
+Function NtrListPlayers
+{
+	(NtrGet "https://api.nitrado.net/services/$ntrid/gameservers/games/players").players
+}
+Function NtrListBackups
+{
+	(NtrGet "https://api.nitrado.net/services/$ntrid/gameservers/backups").backups
+}
+
+
+
+
+$game = (NtrGameserverDetails).game
+$sg = "/games/$ntrusername/noftp/$game/ShooterGame/Saved"
+
+
+#file seeking:  (Invoke-RestMethod "https://api.nitrado.net/services/$ntrid/gameservers/file_server/seek" -Header $headers -ErrorVariable Err -body @{file="$sg/Logs/ShooterGame.log";offset=0;length=5}).data.token.url
+
+##########################################
+
+
+
+md \temp | out-null
+md \temp\ark-backup | out-null
+cd \temp\ark-backup | out-null
+$stamp = $(get-date -f yyyy-MM-dd_HH_mm_ss)
+md "Ark-Backup-$stamp" | out-null
+cd "Ark-Backup-$stamp" | out-null
+md Config | out-null
+
+
+NtrDirDownload "$sg/SavedArks/"
+NtrDirDownload "$sg/Logs/"
+
+cd Config
+NtrDirDownload "$sg/Config/WindowsServer/"
+cd ..
+
+cd ..
+
+
