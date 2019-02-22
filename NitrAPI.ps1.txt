@@ -164,6 +164,17 @@ Function NtrFileSeek
 	#Invoke-RestMethod "https://api.nitrado.net/services/$ntrid/gameservers/file_server/seek" -Header $headers -ErrorVariable Err -body @{file="$sg/Logs/ShooterGame.log";offset=0;length=5}).data.token.url
 	(wget ((NtrGet "https://api.nitrado.net/services/$ntrid/gameservers/file_server/seek" @{file=$file;offset=$offset;length=$length}).token.url)).content
 }
+Function NtrSettingsUpdate
+{
+	Param (
+		$category,
+		$key,
+		$value
+	)
+	
+	NtrPost "https://api.nitrado.net/services/$ntrid/gameservers/settings" @{category=$category;key=$key;value=$value}
+	
+}
 
 #############################
 #End of API, start of custom#
