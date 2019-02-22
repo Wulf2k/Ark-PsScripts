@@ -5,7 +5,17 @@ if ((Test-Path 'HKCU:\Software\NitrAPI') -eq $false)
 	New-Item -Path 'HKCU:\Software\NitrAPI'
 	Set-ItemProperty -Path 'HKCU:\Software\NitrAPI' -Name 'oAuth' -Value (Read-Host 'Enter the oAuth key')
 }
+
+
+
+
+
 $oAuth = (Get-ItemProperty -Path 'HKCU:\Software\NitrAPI' -Name 'oAuth').oAuth
+$ftppassword = "test"
+
+
+
+
 
 #$oAuth = $null
 $game = $null
@@ -28,6 +38,13 @@ $outfile = $null
 
 $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
 $headers.Add("Authorization", "Bearer $oAuth")
+
+
+
+
+##############
+#Start of API#
+##############
 
 Function NtrGet
 {   
@@ -125,6 +142,33 @@ Function NtrFileCopy
 	$body = @{source_path=$source_path;target_path=$target_path;target_name=$target_name}
 	(NtrPost "https://api.nitrado.net/services/$ntrid/gameservers/file_server/copy" $body)
 }
+Function NtrListPlayers
+{
+	(NtrGet "https://api.nitrado.net/services/$ntrid/gameservers/games/players").players
+}
+Function NtrListBackups
+{
+	(NtrGet "https://api.nitrado.net/services/$ntrid/gameservers/backups").backups
+}
+
+$game = (NtrGameserverDetails).game
+$sg = "/games/$ntrusername/noftp/$game/ShooterGame/Saved"
+
+Function NtrFileSeek
+{
+	Param (
+		$file,
+		$offset,
+		$length
+	)
+	#Invoke-RestMethod "https://api.nitrado.net/services/$ntrid/gameservers/file_server/seek" -Header $headers -ErrorVariable Err -body @{file="$sg/Logs/ShooterGame.log";offset=0;length=5}).data.token.url
+	(wget ((NtrGet "https://api.nitrado.net/services/$ntrid/gameservers/file_server/seek" @{file=$file;offset=$offset;length=$length}).token.url)).content
+}
+
+#############################
+#End of API, start of custom#
+#############################
+
 Function NtrDirDownload
 {   
 	Param (
@@ -138,7 +182,13 @@ Function NtrDirDownload
 	
 	$list = (NtrFilesList $path)
 	foreach ($file in $list | where {$_.type -eq "file"}){
-		NtrFileDownload $file.path
+		#NtrFileDownload $file.path
+		#Nitrado disabled direct downloads of SavedArks folder, the below is a workaround.
+		NtrFileCopy $file.path "/games/$ntrusername/ftproot/" | out-null
+		$file.path
+		$filename = (split-path $file.path -leaf)
+		wget ftp://$ntrusername`:test@usny012.nitrado.net/$filename -outfile $filename
+		
 	}
 	foreach ($dir in $list | where {$_.type -eq "dir"}){
 		NtrDirDownload $dir.path
@@ -146,25 +196,23 @@ Function NtrDirDownload
 	cd ..
 }
 
-Function NtrListPlayers
-{
-	(NtrGet "https://api.nitrado.net/services/$ntrid/gameservers/games/players").players
-}
-Function NtrListBackups
-{
-	(NtrGet "https://api.nitrado.net/services/$ntrid/gameservers/backups").backups
-}
 
 
 
+#####################################
+#start of personal scripts using API#
+#####################################
 
-$game = (NtrGameserverDetails).game
-$sg = "/games/$ntrusername/noftp/$game/ShooterGame/Saved"
 
 
-#file seeking:  (Invoke-RestMethod "https://api.nitrado.net/services/$ntrid/gameservers/file_server/seek" -Header $headers -ErrorVariable Err -body @{file="$sg/Logs/ShooterGame.log";offset=0;length=5}).data.token.url
+NtrFileCopy "$sg/SavedArks/TheIsland.ark" "/games/$ntrusername/ftproot/"
+wget ftp://$ntrusername`:$ftppassword@$ntrhostname/TheIsland.ark -outfile C:\temp\ark-backup\currArk\TheIsland.ark
 
-##########################################
+#Fake save version 9
+$offset = 0
+$bytes = [System.IO.File]::ReadAllBytes('c:\temp\ark-backup\currArk\TheIsland.ark')
+$bytes[$offset] = 0x9
+[System.IO.File]::WriteAllBytes('c:\temp\ark-backup\currArk\TheIsland.ark', $bytes)
 
 
 
