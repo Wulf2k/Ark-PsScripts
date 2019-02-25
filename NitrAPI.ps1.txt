@@ -214,35 +214,107 @@ Function NtrDirDownload
 #start of personal scripts using API#
 #####################################
 
+$currArk = "C:\temp\ark-backup\currArk\TheIsland.ark"
+
+Function UpdateCurr {
+	NtrFileCopy "$sg/SavedArks/TheIsland.ark" "/games/$ntrusername/ftproot/"
+	wget ftp://$ntrusername`:$ftppassword@$ntrhostname/TheIsland.ark -outfile $currArk
+
+	#Fake save version 9
+	$offset = 0
+	$bytes = [System.IO.File]::ReadAllBytes($currArk)
+	$bytes[$offset] = 0x9
+	[System.IO.File]::WriteAllBytes($currArk, $bytes)
+}
+
+Function UpdateAll {
+	c:
+	md \temp | out-null
+	md \temp\ark-backup | out-null
+	cd \temp\ark-backup | out-null
+	$stamp = $(get-date -f yyyy-MM-dd_HH_mm_ss)
+	md "Ark-Backup-$stamp" | out-null
+	cd "Ark-Backup-$stamp" | out-null
+	md Config | out-null
 
 
-NtrFileCopy "$sg/SavedArks/TheIsland.ark" "/games/$ntrusername/ftproot/"
-wget ftp://$ntrusername`:$ftppassword@$ntrhostname/TheIsland.ark -outfile C:\temp\ark-backup\currArk\TheIsland.ark
+	NtrDirDownload "$sg/SavedArks/"
+	NtrDirDownload "$sg/Logs/"
 
-#Fake save version 9
-$offset = 0
-$bytes = [System.IO.File]::ReadAllBytes('c:\temp\ark-backup\currArk\TheIsland.ark')
-$bytes[$offset] = 0x9
-[System.IO.File]::WriteAllBytes('c:\temp\ark-backup\currArk\TheIsland.ark', $bytes)
+	cd Config
+	NtrDirDownload "$sg/Config/WindowsServer/"
+	cd ..
+	cd ..
+}
+
+#########################
+#start of .ark functions#
+#########################
+
+$global:file = $null
+
+Function RInt16
+{
+	[System.BitConverter]::ToInt16($global:file.ReadBytes(2), 0)
+}
+Function RInt32
+{   
+	[System.BitConverter]::ToInt32($global:file.ReadBytes(4), 0)
+}
+Function RSingle
+{
+	[System.BitConverter]::ToSingle($global:file.ReadBytes(4), 0)
+}
+Function RString
+{   
+	Param (
+		$length
+    )
+	
+	[System.Text.Encoding]::ASCII.GetString($global:file.ReadBytes($length), 0)
+}
+
+
+Function LoadArk
+{
+	
+	
+	#figure out why this won't take relative paths
+	
+	
+	Param (
+		 [Parameter(Mandatory=$false)]$arkfile
+	)
+	
+	if (!($arkfile)){
+		$arkfile = $currark
+	}
+	
+	$global:file = New-Object System.IO.BinaryReader([System.IO.File]::Open($arkfile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite))
+	$global:file.BaseStream.Position = 0
+}
+
+
+Function ArkVer
+{
+	$global:file.BaseStream.Position = 0
+	RInt16
+}
+Function ArkPlaytime
+{
+	$global:file.BaseStream.Position = 0x12
+	RSingle
+}
+
+
+LoadArk
+ArkVer
+ArkPlayTime
+
+
+#####needs work
 
 
 
-md \temp | out-null
-md \temp\ark-backup | out-null
-cd \temp\ark-backup | out-null
-$stamp = $(get-date -f yyyy-MM-dd_HH_mm_ss)
-md "Ark-Backup-$stamp" | out-null
-cd "Ark-Backup-$stamp" | out-null
-md Config | out-null
-
-
-NtrDirDownload "$sg/SavedArks/"
-NtrDirDownload "$sg/Logs/"
-
-cd Config
-NtrDirDownload "$sg/Config/WindowsServer/"
-cd ..
-
-cd ..
 
 
