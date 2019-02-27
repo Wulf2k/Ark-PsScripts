@@ -251,69 +251,60 @@ Function UpdateAll {
 #start of .ark functions#
 #########################
 
-$global:file = $null
+$currArk = "C:\temp\ark-backup\currArk\TheIsland.ark"
 
-Function RInt16
-{
-	[System.BitConverter]::ToInt16($global:file.ReadBytes(2), 0)
+$RInt16 = {
+	[System.BitConverter]::ToInt16($arkfile.file.ReadBytes(2), 0)
 }
-Function RInt32
-{   
-	[System.BitConverter]::ToInt32($global:file.ReadBytes(4), 0)
+$RInt32 = {   
+	[System.BitConverter]::ToInt32($arkfile.file.ReadBytes(4), 0)
 }
-Function RSingle
-{
-	[System.BitConverter]::ToSingle($global:file.ReadBytes(4), 0)
+$RSingle = {
+	[System.BitConverter]::ToSingle($arkfile.file.ReadBytes(4), 0)
 }
-Function RString
-{   
+$RString = {   
 	Param (
 		$length
     )
 	
-	[System.Text.Encoding]::ASCII.GetString($global:file.ReadBytes($length), 0)
+	[System.Text.Encoding]::ASCII.GetString($arkfile.file.ReadBytes($length), 0)
 }
-
-
-Function LoadArk
-{
-	
-	
-	#figure out why this won't take relative paths
-	
-	
+$LoadArk = {
 	Param (
-		 [Parameter(Mandatory=$false)]$arkfile
+		 [Parameter(Mandatory=$false)]$ArkPath
 	)
 	
-	if (!($arkfile)){
-		$arkfile = $currark
+	if (!($ArkPath)){
+		$ArkPath = $arkfile.ArkPath
 	}
 	
-	$global:file = New-Object System.IO.BinaryReader([System.IO.File]::Open($arkfile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite))
-	$global:file.BaseStream.Position = 0
+	$arkfile.File = New-Object System.IO.BinaryReader([System.IO.File]::Open($ArkPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite))
+	$arkfile.File.BaseStream.Position = 0
+}
+$Ver = {
+	$arkfile.file.BaseStream.Position = 0
+	$arkfile.RInt16()
+}
+$Playtime = {
+	$arkfile.file.BaseStream.Position = 0x12
+	$arkfile.RSingle()
 }
 
 
-Function ArkVer
-{
-	$global:file.BaseStream.Position = 0
-	RInt16
-}
-Function ArkPlaytime
-{
-	$global:file.BaseStream.Position = 0x12
-	RSingle
-}
+$arkfile = New-Object -TypeName PSObject
+Add-Member -InputObject $arkfile -MemberType NoteProperty -Name ArkPath -Value $currArk
+Add-Member -InputObject $arkfile -MemberType NoteProperty -Name File -Value $null
 
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name RInt16 -Value $RInt16
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name RInt32 -Value $RInt32
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name RSingle -Value $RSingle
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name RString -Value $RString
 
-LoadArk
-ArkVer
-ArkPlayTime
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name LoadArk -Value $LoadArk
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name Ver -Value $Ver
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name Playtime -Value $Playtime
 
-
-#####needs work
-
+$arkfile.LoadArk()
 
 
 
