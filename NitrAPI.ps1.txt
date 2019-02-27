@@ -254,21 +254,62 @@ Function UpdateAll {
 $currArk = "C:\temp\ark-backup\currArk\TheIsland.ark"
 
 $RInt16 = {
-	[System.BitConverter]::ToInt16($arkfile.file.ReadBytes(2), 0)
+	[System.BitConverter]::ToInt16($arkfile.Reader.ReadBytes(2), 0)
 }
 $RInt32 = {   
-	[System.BitConverter]::ToInt32($arkfile.file.ReadBytes(4), 0)
+	[System.BitConverter]::ToInt32($arkfile.Reader.ReadBytes(4), 0)
 }
 $RSingle = {
-	[System.BitConverter]::ToSingle($arkfile.file.ReadBytes(4), 0)
+	[System.BitConverter]::ToSingle($arkfile.Reader.ReadBytes(4), 0)
 }
 $RString = {   
 	Param (
 		$length
     )
 	
-	[System.Text.Encoding]::ASCII.GetString($arkfile.file.ReadBytes($length), 0)
+	[System.Text.Encoding]::ASCII.GetString($arkfile.Reader.ReadBytes($length), 0)
 }
+$WInt16 = {
+	Param (
+		[Int16]$value,
+		[Parameter(Mandatory=$false)]$position
+	)
+	if ($position) { $arkfile.Writer.BaseStream.Position = $position }
+	
+	$arkfile.Writer.Write([System.BitConverter]::GetBytes($value))
+	$arkfile.Writer.Flush()
+}
+$WInt32 = {
+	Param (
+		[Int32]$value,
+		[Parameter(Mandatory=$false)]$position
+	)
+	if ($position) { $arkfile.Writer.BaseStream.Position = $position }
+	
+	$arkfile.Writer.Write([System.BitConverter]::GetBytes($value))
+	$arkfile.Writer.Flush()
+}
+$WSingle = {
+	Param (
+		[Single]$value,
+		[Parameter(Mandatory=$false)]$position
+	)
+	if ($position) { $arkfile.Writer.BaseStream.Position = $position }
+	
+	$arkfile.Writer.Write([System.BitConverter]::GetBytes($value))
+	$arkfile.Writer.Flush()
+}
+$WString = {
+	Param (
+		[String]$value,
+		[Parameter(Mandatory=$false)]$position
+	)
+	if ($position) { $arkfile.Writer.BaseStream.Position = $position }
+	
+	$arkfile.Writer.Write([system.Text.Encoding]::UTF8.GetBytes($value))
+	$arkfile.Writer.Flush()
+}
+
 $LoadArk = {
 	Param (
 		 [Parameter(Mandatory=$false)]$ArkPath
@@ -278,31 +319,77 @@ $LoadArk = {
 		$ArkPath = $arkfile.ArkPath
 	}
 	
-	$arkfile.File = New-Object System.IO.BinaryReader([System.IO.File]::Open($ArkPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite))
-	$arkfile.File.BaseStream.Position = 0
+	$arkfile.Reader = New-Object System.IO.BinaryReader([System.IO.File]::Open($ArkPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite))
+	$arkfile.Reader.BaseStream.Position = 0
+	
+	$arkfile.Writer = New-Object System.IO.BinaryWriter([System.IO.File]::Open($ArkPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite))
+	$arkfile.Writer.BaseStream.Position = 0
 }
-$Ver = {
-	$arkfile.file.BaseStream.Position = 0
-	$arkfile.RInt16()
+$Close = {
+	$arkfile.Reader.Dispose()
+	$arkfile.Writer.Dispose()
 }
-$Playtime = {
-	$arkfile.file.BaseStream.Position = 0x12
-	$arkfile.RSingle()
+$BinaryDataOffset = {
+	$tmpPos = $arkfile.Reader.BaseStream.Position
+	$arkfile.Reader.BaseStream.Position = 0x2
+	$arkfile.RInt32()
+	$arkfile.Reader.BaseStream.Position = $tmpPos
+}
+$NameTableOffset = {
+	$tmpPos = $arkfile.Reader.BaseStream.Position
+	$arkfile.Reader.BaseStream.Position = 0xA
+	$arkfile.RInt32()
+	$arkfile.Reader.BaseStream.Position = $tmpPos
+}
+$PropertiesBlockOffset = {
+	$tmpPos = $arkfile.Reader.BaseStream.Position
+	$arkfile.Reader.BaseStream.Position = 0xE
+	$arkfile.RInt32()
+	$arkfile.Reader.BaseStream.Position = $tmpPos
 }
 
 
 $arkfile = New-Object -TypeName PSObject
 Add-Member -InputObject $arkfile -MemberType NoteProperty -Name ArkPath -Value $currArk
-Add-Member -InputObject $arkfile -MemberType NoteProperty -Name File -Value $null
+Add-Member -InputObject $arkfile -MemberType NoteProperty -Name Reader -Value $null
+Add-Member -InputObject $arkfile -MemberType NoteProperty -Name Writer -Value $null
 
 Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name RInt16 -Value $RInt16
 Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name RInt32 -Value $RInt32
 Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name RSingle -Value $RSingle
 Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name RString -Value $RString
 
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name WInt16 -Value $WInt16
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name WInt32 -Value $WInt32
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name WSingle -Value $WSingle
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name WString -Value $WString
+
 Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name LoadArk -Value $LoadArk
-Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name Ver -Value $Ver
-Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name Playtime -Value $Playtime
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name Close -Value $Close
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name BinaryDataOffset -Value $BinaryDataOffset
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name NameTableOffset -Value $NameTableOffset
+Add-Member -InputObject $arkfile -MemberType ScriptMethod -Name PropertiesBlockOffset -Value $PropertiesBlockOffset
+
+
+Add-Member -InputObject $arkfile -MemberType ScriptProperty -Name Ver -Value {
+	$tmpPos = $arkfile.Reader.BaseStream.Position
+	$arkfile.Reader.BaseStream.Position = 0
+	$arkfile.RInt16()
+	$arkfile.Reader.BaseStream.Position = $tmpPos
+} -SecondValue {
+	param($value)
+	$arkfile.WInt16($value, 0)
+}
+Add-Member -InputObject $arkfile -MemberType ScriptProperty -Name Playtime -Value {
+	$tmpPos = $arkfile.Reader.BaseStream.Position
+	$arkfile.Reader.BaseStream.Position = 0x12
+	$arkfile.RSingle()
+	$arkfile.Reader.BaseStream.Position = $tmpPos
+} -SecondValue {
+	param($value)
+	$arkfile.WSingle($value, 0x12)
+}	
+	
 
 $arkfile.LoadArk()
 
